@@ -1,0 +1,7 @@
+tensorflow
+matplotlib
+pillow
+faiss-cpu
+supabase
+flask
+python-dotenv
