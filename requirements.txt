@@ -5,3 +5,4 @@ faiss-cpu
 supabase
 flask
 python-dotenv
+flask_cors
