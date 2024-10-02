@@ -64,7 +64,7 @@ def upload_data():
 
         # Retrieve the closest images and their distances
         nearest_images = [
-            {"path": supabase_client.get_one_file_from_bucket_by_url(paths[idx], name.BUCKET_IMAGES)[1],
+            {"path": supabase_client.get_one_file_from_bucket_by_url(paths[idx], name.BUCKET_IMAGES),
              "distance": round(float(dist), 5)}
             for idx, dist in zip(indices[0], distances[0])
         ]

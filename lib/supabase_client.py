@@ -16,6 +16,9 @@ class SupabaseClient:
     def __init__(self):
         self.client: Client = create_client(url, key)
 
+    def create_path_bucket(self, file_name: str, bucket_name: str):
+        return f"{bucket_name}/{file_name}"
+
     def insert_table(self, data, table_name: str):
         try:
             if not data:
@@ -59,18 +62,19 @@ class SupabaseClient:
     def get_one_file_from_bucket(self, file_name: str, bucket_name: str):
         try:
             response = self.client.storage.from_(bucket_name).download(file_name)
-            return file_name, response
+            return response
         except Exception as e:
             print(f"Error retrieving '{file_name}': {str(e)}")
-            return file_name, None
+            return None
 
     def get_one_file_from_bucket_by_url(self, file_name: str, bucket_name: str):
         try:
             response = self.client.storage.from_(bucket_name).get_public_url(file_name)
-            return file_name, response
+
+            return response
         except Exception as e:
             print(f"Error retrieving '{file_name}': {str(e)}")
-            return file_name, None
+            return None
 
     def get_list_files_from_bucket(self, bucket_name: str):
         try:
@@ -120,19 +124,29 @@ class SupabaseClient:
 
         return files_content
 
-    def upload_bucket(self, file_name, file, bucket_name: str):
+    def upload_bucket(self, file, bucket_name: str):
         try:
-            response = self.client.storage.from_(bucket_name).upload(file_name, file)
+            file_name = file.filename
+            image_existed = self.get_one_file_from_bucket(file_name, bucket_name)
+            if image_existed is not None:
+                file_url = self.client.storage.from_(bucket_name).get_public_url(file_name)
+                return file_url
+            file_content = file.read()  # Changed from file.file_name to file.filename
+            response = self.client.storage.from_(bucket_name).upload(
+                path=file_name,
+                file=file_content, file_options=
+                {"content-type": "image/png"})
 
-            # Check if the response contains an error
-            if response.status_code != 200:
-                error_message = response.error.message if response.error.message else "Unknown error occurred"
-                raise Exception(f"Error uploading file '{file_name}': {error_message}")
             print(f"Successfully uploaded file '{file_name}' to bucket '{bucket_name}'")
-            return response
+            return response.url
 
         except FileNotFoundError as e:
-            raise FileNotFoundError(f"File '{file}' not found.")
+            raise FileNotFoundError(f"File not found.", str(e))
         except Exception as e:
             # Raise the exception with a descriptive message
-            raise Exception(f"Error uploading file '{file_name}': {str(e)}")
+            raise Exception(f"Error uploading file : {str(e)}")
+
+    def delete_files_from_bucket(self, bucket_name: str, file_names: list = None):
+
+        response = self.client.storage.from_(bucket_name).remove(file_names)
+        return response

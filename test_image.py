@@ -96,7 +96,7 @@ def display_nearest_images(paths, indices, distances, k=12):
 def main():
     supabase_client = SupabaseClient()
     model_name = "faiss_index.index"
-    search_image_path = "testimage/test4.jpg"
+    search_image_path = "testimage/test1.jpg"
 
     # Initialize model
     model = image_extract.get_extract_model()
@@ -109,11 +109,11 @@ def main():
     vectors, paths, index = load_vectors_and_paths_and_faiss()
     print(len(paths), len(vectors))
     # Search the image
-    distances, indices = search_image(index, search_vector, k=15)
+    distances, indices = search_image(index, search_vector, k=5)
     print('distances: ', distances)
     print('indices: ', indices)
     # Display the nearest images
-    display_nearest_images(paths, indices, distances, k=15)
+    display_nearest_images(paths, indices, distances, k=5)
 
 
 if __name__ == "__main__":
