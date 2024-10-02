@@ -20,4 +20,4 @@ app.register_blueprint(train_blueprint, url_prefix='/api')
 app.register_blueprint(image_blueprint, url_prefix='/api')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=8050, host='0.0.0.0')
