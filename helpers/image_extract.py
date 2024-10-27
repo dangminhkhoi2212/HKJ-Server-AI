@@ -1,10 +1,13 @@
+from io import BytesIO
+
 import numpy as np
+import requests
 from PIL import Image
-from keras import Model
-from keras.src.applications.vgg16 import VGG16
 from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
 from tensorflow.keras.models import Model
 from tensorflow.keras.preprocessing import image
+
+from lib.supabase_client import SupabaseClient
 
 
 def get_extract_model():
@@ -14,7 +17,6 @@ def get_extract_model():
     return extract_model
 
 
-# Ham tien xu ly, chuyen doi hinh anh thanh tensor
 def image_preprocess(img):
     img = img.resize((224, 224))
     img = img.convert("RGB")
@@ -24,37 +26,50 @@ def image_preprocess(img):
     return x
 
 
-# def extract_vector(model, image_path):
-#     print("Xu ly : ", image_path)
-#     img = Image.open(image_path)
-#     img_tensor = image_preprocess(img)
-#
-#     # Trich dac trung
-#     vector = model.predict(img_tensor)[0]
-#     # Chuan hoa vector = chia chia L2 norm (tu google search)
-#     vector = vector / np.linalg.norm(vector)
-#     return vector
-
-
-def extract_vector(model, image_file):
+def extract_vector(model, img):
     """
     Extracts a feature vector from an image.
 
     Parameters:
     - model: The pre-trained model used to extract features.
-    - image_file: A file-like object containing the image.
+    - img: A PIL Image object.
 
     Returns:
     - vector: The normalized feature vector extracted from the image.
     """
     print("Processing extract vector")
-    img = Image.open(image_file)
     img_tensor = image_preprocess(img)
-
     # Extract features
     vector = model.predict(img_tensor)[0]
-
     # Normalize the vector (L2 normalization)
     vector = vector / np.linalg.norm(vector)
-
     return vector
+
+
+class ImageExtractService:
+    def __init__(self):
+        # Initialize Supabase client
+        self.supabase_client = SupabaseClient()
+        # Load the extraction model
+        self.model = get_extract_model()
+
+    def download_and_process_image(self, image_url: str) -> np.ndarray:
+        """Download image from Supabase storage and create embedding."""
+        try:
+            # Fetch image from URL
+            response = requests.get(image_url)
+            response.raise_for_status()  # Raises an error for bad status codes
+            # Convert bytes to image
+            img = Image.open(BytesIO(response.content)).convert('RGB')
+            # Preprocess the image and extract vector
+            image_vector = extract_vector(self.model, img)
+            return image_vector
+        except requests.RequestException as req_err:
+            raise Exception(f"Error downloading image: {req_err}")
+        except Exception as e:
+            raise Exception(f"Error processing image: {str(e)}")
+
+    def image_to_vector(self, image_url: str) -> np.ndarray:
+        """Convert image URL to vector using model."""
+        image_vector = self.download_and_process_image(image_url)
+        return image_vector

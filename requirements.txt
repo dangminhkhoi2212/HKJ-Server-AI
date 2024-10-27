@@ -3,6 +3,8 @@ matplotlib
 pillow
 faiss-cpu
 supabase
-flask
+flask[async]
 python-dotenv
 flask_cors
+torch
+torchvision

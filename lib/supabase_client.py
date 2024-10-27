@@ -1,20 +1,23 @@
 # importing os module for environment variables
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 
 # importing necessary functions from dotenv library
 from dotenv import load_dotenv
 # loading variables from .env file
 from supabase import create_client, Client
 
-load_dotenv()
-url = os.getenv('SUPABASE_URL')
-key = os.getenv('SUPABASE_KEY')
-
 
 class SupabaseClient:
     def __init__(self):
+        load_dotenv()
+        url = os.getenv('SUPABASE_URL')
+        key = os.getenv('SUPABASE_KEY')
         self.client: Client = create_client(url, key)
+
+    def find_jewelry(self, ids: list):
+        return self.client.table("hkj_jewelry_model").select("*").in_('id', ids).execute()
 
     def create_path_bucket(self, file_name: str, bucket_name: str):
         return f"{bucket_name}/{file_name}"
@@ -126,27 +129,32 @@ class SupabaseClient:
 
     def upload_bucket(self, file, bucket_name: str):
         try:
-            file_name = file.filename
-            image_existed = self.get_one_file_from_bucket(file_name, bucket_name)
-            if image_existed is not None:
-                file_url = self.client.storage.from_(bucket_name).get_public_url(file_name)
-                return file_url
-            file_content = file.read()  # Changed from file.file_name to file.filename
-            response = self.client.storage.from_(bucket_name).upload(
-                path=file_name,
-                file=file_content, file_options=
-                {"content-type": "image/png"})
+            # Lấy thời gian hiện tại và định dạng nó để tạo tên file mới
+            current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+            extension = file.filename.split('.')[-1]  # Lấy phần mở rộng của file (ví dụ: png, jpg)
+            new_file_name = f"{current_time}.{extension}"  # Tạo tên file mới với thời gian
 
-            print(f"Successfully uploaded file '{file_name}' to bucket '{bucket_name}'")
+            # Đọc nội dung file
+            file_content = file.read()
+
+            # Tải file lên bucket
+            response = self.client.storage.from_(bucket_name).upload(
+                path=new_file_name,
+                file=file_content,
+                file_options={"content-type": "image/png"}
+            )
+
+            print(f"Successfully uploaded file '{new_file_name}' to bucket '{bucket_name}'")
             return response.url
 
         except FileNotFoundError as e:
             raise FileNotFoundError(f"File not found.", str(e))
         except Exception as e:
-            # Raise the exception with a descriptive message
             raise Exception(f"Error uploading file : {str(e)}")
 
     def delete_files_from_bucket(self, bucket_name: str, file_names: list = None):
-
         response = self.client.storage.from_(bucket_name).remove(file_names)
         return response
+
+    def delete_table(self, column: str, value, table_name: str):
+        return self.client.table(table_name).delete().eq(column, value).execute()
