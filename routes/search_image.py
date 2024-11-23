@@ -3,7 +3,8 @@
 from flask import Blueprint, request, jsonify
 
 from lib.supabase_client import SupabaseClient
-from services.image_serach_service import ImageSearchSystem
+from services.image_extract_service import ImageExtractService
+from services.image_serach_service2 import ImageSearchService
 
 # Create a Blueprint for the routes
 search_image = Blueprint('search_image', __name__)
@@ -12,7 +13,8 @@ supabase_client = SupabaseClient()
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
-image_search_system = ImageSearchSystem()
+image_search_system = ImageSearchService()
+image_extract_service = ImageExtractService()
 
 
 def allowed_file(filename):
@@ -43,16 +45,22 @@ async def search_images():
             return jsonify({"message": "No file part"}), 400
 
         file = request.files['file']
-
+        print(f'Input file:{file}')
         if file.filename == '':
             return jsonify({"message": "No selected file"}), 400
 
         if not allowed_file(file.filename):
             return jsonify({"message": "File type not allowed"}), 400
-            # Convert the uploaded file to a PIL image
-        nearest_images = image_search_system.search_image(file)
+            # Convert the uploaded file to a PIL image\
+        file_bytes = file.read()
+        img_no_bg = image_extract_service.remove_bg_image(file_bytes)
+        if img_no_bg is None:
+            return jsonify({"message": "Remove background image error"}), 400
+
+        nearest_images = image_search_system.search_image(img_no_bg)
         camel_case_response = convert_keys_to_camel_case(nearest_images)
         return jsonify(camel_case_response), 200
 
     except Exception as e:
+        print(f"Error searching image: {str(e)}")
         return jsonify({'search image error': str(e)}), 500

@@ -3,7 +3,6 @@ from flask import jsonify, request, Blueprint
 
 from lib.supabase_client import SupabaseClient
 from services.image_extract_service import ImageExtractService
-from services.image_serach_service import ImageSearchSystem
 from services.jewelry_image_vector_service import JewelryImageVectorService
 
 # loading variables from .env file
@@ -15,8 +14,6 @@ supabase_client = SupabaseClient()
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
-
-image_search_system = ImageSearchSystem()
 
 image_extract_service = ImageExtractService()
 jewelry_image_vector_service = JewelryImageVectorService()
@@ -52,6 +49,27 @@ async def remove_image():
         print(f'images remove: {images}')
         result = jewelry_image_vector_service.remove_images(images)
         return jsonify({'success': True, 'data': result})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@extract_image.route('/extract-image/test/remove-bg', methods=['POST'])
+async def remove_bg_image():
+    try:
+        if 'file' not in request.files:
+            return jsonify({"message": "No file part"}), 400
+
+        file = request.files['file']
+        print(f'Input file:{file}')
+        if file.filename == '':
+            return jsonify({"message": "No selected file"}), 400
+
+        if not allowed_file(file.filename):
+            return jsonify({"message": "File type not allowed"}), 400
+
+        image_extract_service.remove_bg_image(file.read())
+        return jsonify({'success': True, })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

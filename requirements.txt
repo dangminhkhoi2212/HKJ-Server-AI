@@ -8,3 +8,7 @@ python-dotenv
 flask_cors
 torch
 torchvision
+sentence_transformers
+tf_keras
+rembg
+opencv-python
