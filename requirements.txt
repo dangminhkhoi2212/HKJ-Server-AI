@@ -12,3 +12,4 @@ sentence_transformers
 tf_keras
 rembg
 opencv-python
+waitress

@@ -2,13 +2,11 @@ import asyncio
 from math import sqrt
 
 import faiss
-import numpy as np
 
 from constants import name
 from helpers.file_helper import load_file, save_file
 from lib.supabase_client import SupabaseClient
 from services.image_extract_service import ImageExtractService
-from services.image_serach_service import ImageSearchService
 from services.jewelry_image_vector_service import JewelryImageVectorService
 
 
@@ -16,7 +14,6 @@ class BuildFaissService:
     def __init__(self):
         self.supabase = SupabaseClient().client
         self.extract_service = ImageExtractService()
-        self.image_search_service = ImageSearchService()
         self.jewelry_image_vector_service = JewelryImageVectorService()
 
     def _handle_build_faiss_index(self, ids, vectors):
@@ -36,7 +33,7 @@ class BuildFaissService:
 
         # Gắn id vào index
         # index = faiss.IndexIDMap(index)
-        index.add_with_ids(vectors, np.array(ids, dtype=np.int64))
+        index.add_with_ids(vectors, ids)
 
         save_file(index, name.FILE_FAISS_INDEX)
 
@@ -49,7 +46,7 @@ class BuildFaissService:
         if index_file is not None:
             return index_file
         ids, vectors = self.jewelry_image_vector_service.load_vectors_from_supabase()
-
+        print(f'loaded ids: {ids}')
         if len(vectors) == 0:
             raise ValueError("No vectors found in Supabase")
         return self._handle_build_faiss_index(ids, vectors)

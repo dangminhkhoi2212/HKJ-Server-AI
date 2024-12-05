@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 # loading variables from .env file
 from supabase import create_client, Client
 
+from constants import name
+
 
 class SupabaseClient:
     def __init__(self):
@@ -16,8 +18,57 @@ class SupabaseClient:
         key = os.getenv('SUPABASE_KEY')
         self.client: Client = create_client(url, key)
 
+    def olf_find_jewelry(self, ids: list):
+        try:
+
+            # Query the Supabase table for jewelry models related to the given ids
+
+            response = self.client.table(name.TABLE_VECTORS).select(
+                '''id, hkj_jewelry_model(id, name, cover_image, price, category_id)'''
+            ).in_('id', ids).execute()
+
+            jewelry_models = response.data
+            # print(f"response: {jewelry_models}")
+            if not jewelry_models:
+                print("No jewelry models found for the provided IDs.")
+                return []
+
+            sorted_models = []
+            for id in ids:
+                for jewelry in jewelry_models:
+                    if jewelry['id'] == id:
+                        sorted_models.append(jewelry)
+                        break
+            result = [item['hkj_jewelry_model'] for item in sorted_models]
+            result_ids = [item['id'] for item in sorted_models]
+            print(f'ids: {ids}')
+            print(f'result_ids: {result_ids}')
+            print(f"sorted_models: {sorted_models}")
+
+            return sorted_models
+
+        except Exception as e:
+            print(f"Error in find_jewelry: {str(e)}")
+            return []
+
     def find_jewelry(self, ids: list):
-        return self.client.table("hkj_jewelry_model").select("*").in_('id', ids).execute()
+        try:
+            ids = [int(id) for id in ids]
+
+            response = self.client.rpc('get_unique_jewelry', {'ids': ids}).execute()
+            jewelry_models = response.data
+
+            print(
+                f"response: "
+                f"{[{'vector_id': item['vector_id'], 'id': item['id'], 'name': item['name']} for item in jewelry_models]}")
+            if not jewelry_models:
+                print("No jewelry models found for the provided IDs.")
+                return []
+            return jewelry_models
+
+        except Exception as e:
+            print(f"Error in find_jewelry: {str(e)}")
+            return []
 
     def create_path_bucket(self, file_name: str, bucket_name: str):
         return f"{bucket_name}/{file_name}"

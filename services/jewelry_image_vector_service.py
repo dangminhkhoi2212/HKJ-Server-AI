@@ -19,7 +19,7 @@ class JewelryImageVectorService:
             response = (
                 self.supabase_client
                 .table(self.table_name)
-                .select("jewelry_id, vector")
+                .select("id", "jewelry_id", "vector")
                 .eq("has_vector", True)
                 .range(offset, offset + limit - 1)
                 .execute()
@@ -36,7 +36,7 @@ class JewelryImageVectorService:
             # Tăng offset cho lần truy vấn tiếp theo
             offset += limit
 
-        ids = [record["jewelry_id"] for record in all_records]
+        ids = [record["id"] for record in all_records]
         vectors = [record["vector"] for record in all_records]
 
         return ids, np.array(vectors, dtype="float32")
@@ -47,7 +47,7 @@ class JewelryImageVectorService:
                 raise ValueError("Data is missing")
 
             response = self.supabase_client.table(self.table_name).insert(data).execute()
-            
+
             if response.data:
                 return response.data
             else:

@@ -39,7 +39,7 @@ class ImageExtractService:
     def get_modified_VGG19_model(self):
         # Load the VGG19 model with pretrained weights from ImageNet
         vgg19_model = VGG19(input_shape=(224, 224, 3), weights="imagenet")
-        vgg19_model.trainable = False
+        # vgg19_model.trainable = False
 
         # Create a new model that outputs the feature vector from the last fully connected layer
         # Lấy đầu vào từ VGG19
@@ -248,20 +248,14 @@ class ImageExtractService:
             print(f"Error handling FAISS index: {str(e)}")
 
     def remove_bg_image(self, file_bytes):
-        """Download image from Supabase storage and create embedding."""
         try:
             if isinstance(file_bytes, bytes):
                 img = Image.open(BytesIO(file_bytes)).convert('RGB')
-                return img
+                # return img
             else:
                 raise TypeError("Expected bytes, got {}".format(type(file_bytes)))
-            # Convert bytes to PIL Image
-            # img = Image.open(BytesIO(file_bytes)).convert('RGB')
             image_no_bg = remove(img)
-            image_no_bg.show()
-            img_display = [img, image_no_bg]
-            # self.display_images(img_display)
-            # Processed image without background
+            # image_no_bg.show()
             return image_no_bg
 
         except Exception as e:
@@ -287,11 +281,12 @@ def main():
     image_extract_service = ImageExtractService()
 
     url = (
-        "https://cdn.pnj.io/images/detailed/197/on-gvctxmc000004-vong-tay-vang-18k-dinh-da-citrine-pnj-audax-rosa-1"
-        ".jpg")
+        "https://cdn.pnj.io/images/detailed/225/sp-gnddddw013763-nhan-kim-cuong-vang-trang-14k-pnj-my-first-diamond"
+        ".png")
 
-    # response = requests.get(url)
-    # response.raise_for_status()  # Raises an error for bad status codes
+    response = requests.get(url)
+    response.raise_for_status()  # Raises an error for bad status codes
+    # img = Image.open(BytesIO(response.content)).convert('RGB')
     # Convert bytes to image
     # Kiểm tra xóa background
     # image_extract_service.test_image_local(url)
@@ -299,9 +294,11 @@ def main():
     # kiểm tra trích đặc trưng
     # image = image_extract_service.download_and_process_image(url)
     # print(image.shape)
-    # images = image_service.augment_image(img)
+    img = image_extract_service.remove_bg_image(response.content)
 
-    # image_service.display_images([image_no_bg])
+    images = image_extract_service.augment_image(img)
+
+    image_extract_service.display_images(images)
     # vgg_vectors = image_extract_service.download_and_process_image(url)
     # resnet_vectors = image_extract_service.download_and_process_image(url)
     #

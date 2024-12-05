@@ -1,35 +1,39 @@
 import io
 import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict
 
 import numpy as np
 from PIL import Image
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
-from constants import name
-from helpers.file_helper import load_file
+from lib.supabase_client import SupabaseClient
 from services.image_extract_service import ImageExtractService
-from services.image_serach_service2 import ImageSearchService
+from services.image_serach_service import ImageSearchService
 
 
 class ImageSearchEvaluationService:
     def __init__(self, index_file):
         self.image_search_service = ImageSearchService()
         self.image_extract_service = ImageExtractService()
+        self.supabase = SupabaseClient()
         self.index = index_file
 
-    def image_to_bytes(self, image_path: str) -> bytes:
+    def open_image(self, image_path: str):
         """Convert image at image_path to bytes."""
         try:
-            with Image.open(image_path) as image:
-                byte_stream = io.BytesIO()
-                image.save(byte_stream, format=image.format)
-                return byte_stream.getvalue()
+            with Image.open(image_path) as img:
+                img_file_like = io.BytesIO()
+                img.save(img_file_like, img.format)
+                img_file_like.seek(0)
+                return img_file_like
         except Exception as e:
             raise ValueError(f"Error converting image to bytes: {e}")
 
     def extract_id_from_filename(self, filename: str) -> str:
         """Extract ID from filename format (id).jpg."""
         try:
+            print(f'extract_id_from_filename: {filename}')
             return str(filename.split('.')[0])
         except ValueError as e:
             raise ValueError(f"Invalid filename format: {e}")
@@ -50,21 +54,54 @@ class ImageSearchEvaluationService:
 
         return sum_precision / min(len(retrieved_results), max_k)
 
-    def search_image(self, file: bytes, top_k: int) -> List[str]:
-        """Search image and return top_k results."""
+    def find_jewelry_same_category(self, ids) -> List[str]:
+        response = self.supabase.client.table("hkj_jewelry_model").select("*").in_('id', ids).execute()
+        return [str(item['category_id']) for item in response.data]
+
+    def search_image(self, file, k=10) -> List[str]:
+        """Search image in Supabase storage and return results."""
         try:
-            search_vector = np.atleast_2d(self.image_extract_service.extract_vector(file))
-            index = self.index
+            # Convert to image without background
+            file_bytes = file.read()
+            image_no_bg = self.image_extract_service.remove_bg_image(file_bytes)
 
-            index.nprobe = 1
-            distances, indices = index.search(search_vector, top_k)
+            # Open the original image
+            image = Image.open(io.BytesIO(file_bytes)).convert('RGB')
 
-            return [
-                str(idx)
-                for idx, dist in zip(indices[0], distances[0])
-            ]
+            if image is None and image_no_bg is None:
+                raise ValueError('Image not found')
+
+            # Use ThreadPoolExecutor to perform searches in parallel
+            with ThreadPoolExecutor() as executor:
+                future_no_bg = executor.submit(self.image_search_service.search_with_faiss, image_no_bg, k)
+                future_with_bg = executor.submit(self.image_search_service.search_with_faiss, image, k)
+
+                # Collect results as they complete
+                search_no_bg = future_no_bg.result()
+                search_with_bg = future_with_bg.result()
+
+            # Combine and sort results
+            result = search_with_bg + search_no_bg
+            result = sorted(result, key=self.image_search_service.sorted_field)
+            print(f'result: {result}')
+
+            # Unique ids
+            # Unique ids while maintaining order
+            # seen = set()
+            # unique_ids = []
+            # for item in result:
+            #     if item['id'] not in seen:
+            #         seen.add(item['id'])
+            #         unique_ids.append(item['id'])
+            #
+            # print(f'Unique ids: {unique_ids}')
+            # Fetch jewelry models from Supabase
+            ids = [item['id'] for item in result]
+            category_ids = self.find_jewelry_same_category(ids)
+            print(f'category_ids: {category_ids}')
+            return category_ids
         except Exception as e:
-            raise RuntimeError(f"Error searching image: {e}")
+            raise Exception(f"Error searching image: {str(e)}")
 
     def evaluate_model(self, test_folder: str, k_values: List[int] = [1, 3, 5]) -> Dict:
         """Evaluate the model using P@K and MAP metrics."""
@@ -86,9 +123,8 @@ class ImageSearchEvaluationService:
             try:
                 actual_id = self.extract_id_from_filename(filename)
                 image_path = os.path.join(test_folder, filename)
-                image_bytes = self.image_to_bytes(image_path)
-                image_bytes = self.image_extract_service.remove_bg_image(image_bytes)
-                search_results = self.search_image(image_bytes, max_k)
+                img_file_like = self.open_image(image_path)
+                search_results = self.search_image(img_file_like, max_k)
 
                 query_metrics = {
                     'query_id': actual_id,
@@ -97,7 +133,7 @@ class ImageSearchEvaluationService:
                 }
 
                 for k in k_values:
-                    relevant_items = sum(1 for pred_id in search_results[:k] if pred_id == actual_id)
+                    relevant_items = search_results[:k].count(actual_id)
                     precision = self.calculate_precision_at_k(relevant_items, k)
                     results['precision_at_k'][k].append(precision)
                     query_metrics['precision_at_k'][k] = precision
@@ -113,7 +149,7 @@ class ImageSearchEvaluationService:
 
         return self._calculate_final_metrics(results)
 
-    def evaluate_model_2(self, test_folder: str, k_values: List[int] = [5, 10, 15, 30]) -> Dict:
+    def evaluate_model_2(self, test_folder: str, k_values: List[int] = [1, 5, 10]) -> Dict:
         """Evaluate the model and return Precision@K, Recall@K, and F1@K."""
         if not os.path.exists(test_folder):
             raise FileNotFoundError(f"Test folder does not exist: {test_folder}")
@@ -133,17 +169,18 @@ class ImageSearchEvaluationService:
 
             try:
                 actual_id = self.extract_id_from_filename(filename)
+                print(f'actual_id: {actual_id}')
                 image_path = os.path.join(test_folder, filename)
-                image_bytes = self.image_to_bytes(image_path)
-                image_bytes = self.image_extract_service.remove_bg_image(image_bytes)
-                search_results = self.search_image(image_bytes, max_k)
-                relevant_items_in_top_k_recall = sum(1 for pred_id in search_results if pred_id == actual_id)
+                img_file_like = self.open_image(image_path)
+                search_results = self.search_image(img_file_like, max_k)
+                relevant_items_in_top_k_recall = search_results.count(actual_id)
                 # Total number of relevant items (assume only 1 relevant item per query)
                 total_relevant_items = 1
 
                 for k in k_values:
                     # Relevant items in Top K
-                    relevant_items_in_top_k = sum(1 for pred_id in search_results[:k] if pred_id == actual_id)
+                    relevant_items_in_top_k = search_results[:k].count(actual_id)
+                    print(f'''relevant_items_in_top_k: {relevant_items_in_top_k}''')
 
                     # Precision@K
                     precision = self.calculate_precision_at_k(relevant_items_in_top_k, k)
@@ -225,14 +262,58 @@ class ImageSearchEvaluationService:
         for k, value in metrics['mean_f1_at_k'].items():
             print(f"F1@{k}: {value:.4f}")
 
+    def evaluate_final(self, test_folder):
+        if not os.path.exists(test_folder):
+            raise FileNotFoundError(f"Test folder does not exist: {test_folder}")
+
+        all_true_labels = []
+        all_predicted_labels = []
+
+        for filename in os.listdir(test_folder):
+            if not filename.lower().endswith((".jpg", ".png")):
+                continue
+
+            try:
+                true_label = int(self.extract_id_from_filename(filename))
+                image_path = os.path.join(test_folder, filename)
+                img_file_like = self.open_image(image_path)
+                result = self.image_search_service.search_image(img_file_like, 10)
+                predicted_labels = [x['category_id'] for x in result]
+                print(f'predicted_labels: {predicted_labels}')
+
+                all_true_labels.extend([true_label] * len(predicted_labels))
+                all_predicted_labels.extend(predicted_labels)
+
+            except Exception as e:
+                print(f"Error processing {filename}: {e}")
+
+        # Tính toán các chỉ số bằng thư viện sklearn
+        precision = precision_score(all_true_labels, all_predicted_labels, average='macro')
+        recall = recall_score(all_true_labels, all_predicted_labels, average='macro')
+        f1 = f1_score(all_true_labels, all_predicted_labels, average='macro')
+        accuracy = accuracy_score(all_true_labels, all_predicted_labels)
+
+        print(f"Precision: {precision}")
+        print(f"Recall: {recall}")
+        print(f"F1 Score: {f1}")
+        print(f"Accuracy: {accuracy}")
+
+        return {
+            "precision": precision,
+            "recall": recall,
+            "f1_score": f1,
+            "accuracy": accuracy
+        }
+
 
 def main():
-    index = load_file(name.FILE_FAISS_INDEX)
+    search_service = ImageSearchService()
+    index = search_service.index
     evaluator = ImageSearchEvaluationService(index)
     test_folder = r"E:/Images/test"
 
-    metrics = evaluator.evaluate_model_2(test_folder)
-    evaluator.print_evaluation_results_2(metrics)
+    metrics = evaluator.evaluate_final(test_folder)
+    # evaluator.print_evaluation_results_2(metrics)
 
 
 if __name__ == "__main__":
