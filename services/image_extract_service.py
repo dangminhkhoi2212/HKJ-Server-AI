@@ -39,7 +39,6 @@ class ImageExtractService:
     def get_modified_VGG19_model(self):
         # Load the VGG19 model with pretrained weights from ImageNet
         vgg19_model = VGG19(input_shape=(224, 224, 3), weights="imagenet")
-        # vgg19_model.trainable = False
 
         # Create a new model that outputs the feature vector from the last fully connected layer
         # Lấy đầu vào từ VGG19
@@ -80,9 +79,10 @@ class ImageExtractService:
         img_tensor = self.image_preprocess(img)
         # Extract features
         vector = self.model.predict(img_tensor)[0]
+        # print(f'Extracted vector: {str(vector.tolist())}')
         # Normalize the vector (L2 normalization)
         vector = vector / np.linalg.norm(vector)
-
+        # print(f'Extracted vector L2: {str(vector.tolist())}')
         return vector
 
     def download_and_process_image(self, image_url: str) -> np.ndarray:
@@ -255,7 +255,7 @@ class ImageExtractService:
             else:
                 raise TypeError("Expected bytes, got {}".format(type(file_bytes)))
             image_no_bg = remove(img)
-            # image_no_bg.show()
+            image_no_bg.show()
             return image_no_bg
 
         except Exception as e:

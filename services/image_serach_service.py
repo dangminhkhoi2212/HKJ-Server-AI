@@ -134,6 +134,7 @@ class ImageSearchService:
                     unique_ids.append(item['id'])
 
             print(f'Unique ids: {unique_ids}')
+
             # Fetch jewelry models from Supabase
             jewelry_models = self.supabaseClient.find_jewelry(unique_ids)
             ids_search = [jewelry['category_id'] for jewelry in jewelry_models]
